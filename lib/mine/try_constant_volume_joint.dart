@@ -15,10 +15,24 @@ class TryConstantVolumeJoint extends Forge2DGame with TapDetector {
   static const blobCount = 30;
   final blobRadius = Vector2.all(6.0);
   final velocity = (Vector2.random() - Vector2.random()) * 200;
+  final List<Wall> walls = [];
   @override
   Future<void>? onLoad() async {
-    await addAll(createBoundaries(this));
+    walls.addAll(createBoundaries(this));
+    await addAll(walls);
   }
+
+  @override
+  void onGameResize(Vector2 canvasSize) {
+    super.onGameResize(canvasSize);
+    if(walls.isNotEmpty) {
+      removeAll(walls);
+      walls.clear();
+      walls.addAll(createBoundaries(this));
+      addAll(walls);
+    }
+  }
+
   @override
   void onTapDown(TapDownInfo info) {
     final jointDef = ConstantVolumeJointDef()
