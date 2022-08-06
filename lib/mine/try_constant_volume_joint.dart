@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flame/components.dart';
+import 'package:flame/effects.dart';
 import 'package:flame/game.dart';
 import 'package:flame/input.dart';
 import 'package:flame/palette.dart';
@@ -52,7 +53,7 @@ class TryConstantVolumeJoint extends Forge2DGame with HasTappables {
   }
 }
 
-class EntityComponent extends BodyComponent with Tappable {
+class EntityComponent extends BodyComponent with Tappable, ScaleProvider {
   static const jointCount = 24;
   final Vector2 entityPosition;
   final double circleShapeRadius = 5.8;
@@ -60,16 +61,16 @@ class EntityComponent extends BodyComponent with Tappable {
   final Color? circleShapeColor;
   final Vector2? linearVelocity;
   final List<BlobComponent> blobs = [];
+  @override Vector2 scale = Vector2(1, 1);
+
+  ConstantVolumeJoint? _constantVolumeJoint;
   final constantVolumeJointDef = ConstantVolumeJointDef()
     ..frequencyHz = 0.0
     ..dampingRatio = 0.0;
 
   EntityComponent(this.entityPosition, {this.circleShapeColor, this.linearVelocity}) {
-    if (circleShapeColor == null) {
-      paint = PaintExtension.random(withAlpha: 0.9, base: 20);
-    } else {
-      paint = Paint()..color = circleShapeColor!;
-    }
+    priority = 1;
+    paint = Paint()..color = circleShapeColor ?? ColorExtension.random(withAlpha: 0.9, base: 20);
   }
 
   @override
@@ -81,7 +82,8 @@ class EntityComponent extends BodyComponent with Tappable {
 
     await gameRef.addAll(blobs);
     if(constantVolumeJointDef.bodies.length >= 2) {
-      world.createJoint(ConstantVolumeJoint(world, constantVolumeJointDef));
+      _constantVolumeJoint = ConstantVolumeJoint(world, constantVolumeJointDef);
+      world.createJoint(_constantVolumeJoint!);
     }
   }
 
@@ -108,22 +110,34 @@ class EntityComponent extends BodyComponent with Tappable {
 
   @override
   void renderCircle(Canvas canvas, Offset center, double radius) {
-    super.renderCircle(canvas, center, radius);
-    final lineRotation = Offset(0, radius);
+    double targetRadius = radius * scale.x;
+    super.renderCircle(canvas, center, targetRadius);
+    final lineRotation = Offset(0, targetRadius);
     canvas.drawLine(center, center + lineRotation, Paint()..color = Colors.white);
   }
 
   @override
   bool onTapDown(TapDownInfo info) {
-    removeFromParent();
-    gameRef.removeAll(blobs);
+    add(ScaleEffect.to(Vector2.all(0), EffectController(duration: 0.5, curve: Curves.bounceOut,), onComplete: () {
+      removeFromParent();
+    }));
+    for (var element in blobs) {
+      element.add(OpacityEffect.fadeOut(EffectController(
+        duration: 0.2,
+        infinite: false,
+      ), onComplete:() {
+        element.removeFromParent();
+      }));
+    }
     info.handled = true;
     return true;
   }
+
 }
 
 class BlobComponent extends BodyComponent {
   final ConstantVolumeJointDef constantVolumeJointDef;
+  DistanceJoint? distanceJoint;
   final int jointIndex;
   final double entityRadius;
   final BodyComponent centerComponent;
@@ -165,7 +179,8 @@ class BlobComponent extends BodyComponent {
       ..frequencyHz = 0.0
       ..dampingRatio = 0.0;
     distanceJointDef.initialize(centerComponent.body, body, centerComponent.body.position, body.position);
-    world.createJoint(DistanceJoint(distanceJointDef));
+    distanceJoint = DistanceJoint(distanceJointDef);
+    world.createJoint(distanceJoint!);
     return body;
   }
 }
