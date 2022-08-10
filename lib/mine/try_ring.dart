@@ -19,6 +19,10 @@ class TryRing extends Forge2DGame with HasTappables {
   Future<void>? onLoad() async {
     await add(FpsTextComponent()..position = Vector2(24, 28)..priority = 0);
     await addAll(createBoundaries(this));
+    for (var i = 0; i < 4; ++i) {
+      Vector2 velocity = (Vector2.random() - Vector2.random()) * 20;
+      await add(RingComponent(getRandomPosition(), ringRadius: 8.0, linearVelocity: velocity));
+    }
   }
   @override
   void onTapDown(int pointerId, TapDownInfo info) {
@@ -26,25 +30,54 @@ class TryRing extends Forge2DGame with HasTappables {
     if(!info.handled) {
       final velocity = (Vector2.random() - Vector2.random()) * 20;
       Future(() async {
-        await add(RingComponent(info.eventPosition.game, linearVelocity: velocity));
+        await add(RingComponent(info.eventPosition.game, ringRadius: 8.0, linearVelocity: velocity));
       });
     }
+  }
+
+  Vector2 getRandomPosition({double radius = 8.0}) {
+    radius += 1;
+    Vector2 position = size..multiply(Vector2.random());
+    if(position.x < radius) position.x = radius;
+    if(position.y < radius) position.y = radius;
+    Vector2 tempPosition = position + Vector2.all(radius);
+    if(tempPosition.x > size.x) position.x = size.x - radius;
+    if(tempPosition.y > size.y) position.y = size.y - radius;
+    return position;
   }
 }
 
 class RingComponent extends BodyComponent with Tappable {
   static const jointCount = 8;
   final Vector2 position;
-  final double ringRadius = 8.0;
+  final double ringRadius;
   final Vector2? linearVelocity;
   Timer? spawnTimer;
+  Timer? spawnTimer2;
+  final _textRenderer = TextPaint(
+    style: const TextStyle(
+      color: Colors.white,
+      fontSize: 6.0,
+    ),
+  );
+  final _borderRenderer = TextPaint(
+    style: TextStyle(
+      fontSize: 6.0,
+      foreground: Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.2
+        ..color = Colors.red,
+    ),
+  );
 
-  RingComponent(this.position, {this.linearVelocity, super.priority = 1});
+  RingComponent(this.position, {required this.ringRadius, this.linearVelocity, super.priority = 1});
 
   @override
   Future<void> onLoad() async {
     super.onLoad();
     await add(ColorfulRing(radius: ringRadius));
+    await add(TextComponent(text: '-999', textRenderer: _textRenderer)..anchor = Anchor.center);
+    await add(TextComponent(text: '-999', textRenderer: _borderRenderer)..anchor = Anchor.center);
   }
   @override
   void onMount() {
@@ -54,10 +87,18 @@ class RingComponent extends BodyComponent with Tappable {
     spawnTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       _showParticles();
     });
-    Timer.periodic(const Duration(milliseconds: 750), (_) {
+    spawnTimer2 = Timer.periodic(const Duration(milliseconds: 1000), (_) {
       _showParticles();
     });
   }
+
+  @override
+  void onRemove() {
+    super.onRemove();
+    spawnTimer?.cancel();
+    spawnTimer2?.cancel();
+  }
+
   void _showParticles() {
     for (var i = 0; i < jointCount; i++) {
       final angle = (i / jointCount) * math.pi * 2;
@@ -69,7 +110,6 @@ class RingComponent extends BodyComponent with Tappable {
           lifespan: 1,
           offset: Vector2(x, y),
           child: _fireworkParticle(),
-          // child: CircleParticle(paint: Paint()..color = Colors.white, radius: 0.2,),
         ),
       ));
     }
